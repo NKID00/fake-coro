@@ -1,7 +1,7 @@
 '''Coroutines emulated with threads.'''
 
 from __future__ import annotations
-from typing import Callable, Any, Iterable, Mapping, Union, Optional
+from typing import Callable, Any, Iterable, Mapping, Union, Optional, Generator
 from types import TracebackType
 from queue import Queue
 from dataclasses import dataclass
@@ -86,7 +86,7 @@ class FakeCoroutine:
                 RuntimeError('unexpected result from fake coroutine')))
             return
         try:
-            retval = func(*args, **kwargs)
+            return_value = func(*args, **kwargs)
         except StopIteration as exc:
             try:
                 raise RuntimeError('fake coroutine raised'
@@ -100,7 +100,7 @@ class FakeCoroutine:
             self._queue_yield_raise.put(_CoOpRaise(exc))
             return
         try:
-            raise StopIteration(retval)
+            raise StopIteration(return_value)
         except StopIteration as exc:
             self._status = _CoStatus.STOPPED
             self._queue_yield_raise.put(_CoOpRaise(exc))
@@ -141,7 +141,7 @@ class FakeCoroutine:
             except (StopIteration, GeneratorExit):
                 pass
 
-    def __del__(self) -> None:
+    def __del__(self) -> None:  # pragma: no cover
         self.close()
 
     def throw(self, exc: Union[BaseException, type],
@@ -214,14 +214,20 @@ def _current_context() -> FakeCoroutine:
 
 
 # pylint: disable=protected-access
-def yield_(value: Any = None) -> Any:
-    '''Yields from the current fake coroutine with or without a value and
-    optionally receives the value sent by the caller.
+def yield_(*value: Any) -> Any:
+    '''Yields the value or None and receives another value or None sent by the
+    caller.
 
     A `RuntimeError` will be raised when called outside a fake coroutine.'''
+    if len(value) == 0:
+        value_or_none = None
+    elif len(value) == 1:
+        value_or_none = value[0]
+    else:
+        value_or_none = value
     context = _current_context()
     context._status = _CoStatus.YIELDED
-    context._queue_yield_raise.put(_CoOpYield(value))
+    context._queue_yield_raise.put(_CoOpYield(value_or_none))
     result = context._queue_next_throw.get()
     context._status = _CoStatus.RUNNING
     if isinstance(result, _CoOpNext):
@@ -232,6 +238,35 @@ def yield_(value: Any = None) -> Any:
         'unexpected result from fake coroutine')
 
 
-def yield_from(coro: FakeCoroutine) -> Any:
+# pylint: disable=protected-access
+def yield_from(coro: Union[Iterable, Generator, FakeCoroutine]) -> Any:
+    '''Yields from the coroutine or fake coroutine until it stops.
+
+    A `RuntimeError` will be raised when called outside a fake coroutine.'''
     context = _current_context()
-    # TODO: implement
+    coro = iter(coro)
+    try:
+        yield_value = next(coro)
+    except StopIteration as exc:
+        return exc.value
+    while True:
+        context._status = _CoStatus.YIELDED
+        context._queue_yield_raise.put(_CoOpYield(yield_value))
+        result = context._queue_next_throw.get()
+        context._status = _CoStatus.RUNNING
+        if isinstance(result, _CoOpNext):
+            try:
+                if result.value is None:
+                    yield_value = next(coro)
+                else:
+                    yield_value = coro.send(result.value)  # type: ignore
+            except StopIteration as exc:
+                return exc.value
+        if isinstance(result, _CoOpThrow):
+            if hasattr(coro, 'throw'):
+                try:
+                    yield_value = coro.throw(result.value)  # type: ignore
+                except StopIteration as exc:
+                    return exc.value
+            else:
+                raise result.value

@@ -21,12 +21,23 @@ def func2():
 def func3():
     raise StopIteration('what?')
 
+
 @fake_coro
 def func4():
     try:
         yield_()
     except GeneratorExit:
         1 / 0
+
+
+@fake_coro
+def func5():
+    try:
+        yield_()
+    except ZeroDivisionError:
+        yield_(1)
+    else:
+        yield_(2)
 
 
 def test_exception():
@@ -93,15 +104,22 @@ def test_exception():
         assert 'fake coroutine raised StopIteration' in result
     else:
         pytest.fail('RuntimeError is not raised')
-    
+
     coro = func4()
     next(coro)
     with pytest.raises(ZeroDivisionError):
         coro.close()
     coro.close()
 
-    coro = func4()
+    coro = func5()
     next(coro)
-    # coro.close()
-    del coro
-    coro = 1
+    assert coro.throw(ZeroDivisionError) == 1
+
+    coro = func5()
+    next(coro)
+    assert next(coro) == 2
+
+    coro = func5()
+    next(coro)
+    with pytest.raises(KeyError):
+        coro.throw(KeyError)
