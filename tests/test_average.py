@@ -1,18 +1,16 @@
-import itertools
-
 import pytest
 
-import fake_coro
+from fake_coro import fake_coro, yield_
 
 
-@fake_coro.fake_coro
+@fake_coro
 def average():
     total, count = 0, 0
-    num = fake_coro.yield_()
+    num = yield_()
     while True:
         total += num
         count += 1
-        num = fake_coro.yield_(total / count)
+        num = yield_(total / count)
 
 
 def test_average():

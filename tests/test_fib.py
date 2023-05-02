@@ -1,13 +1,13 @@
 import itertools
 
-import fake_coro
+from fake_coro import fake_coro, yield_
 
 
-@fake_coro.fake_coro
+@fake_coro
 def fib():
     a, b = 1, 1
     while True:
-        fake_coro.yield_(a)
+        yield_(a)
         a, b = b, a + b
 
 
