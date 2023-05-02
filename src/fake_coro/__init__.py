@@ -10,7 +10,7 @@ import threading
 import enum
 import inspect
 
-__all__ = ['FakeCoroutine', 'fake_coro', 'yield_', 'await_']
+__all__ = ['FakeCoroutine', 'fake_coro', 'yield_', 'yield_from']
 
 
 @enum.unique
@@ -82,12 +82,26 @@ class FakeCoroutine:
                 self._queue_yield_raise.put(_CoOpRaise(exc))
                 return
         else:
-            self._queue_next_throw.put(_CoOpRaise(
+            self._queue_yield_raise.put(_CoOpRaise(
                 RuntimeError('unexpected result from fake coroutine')))
             return
         try:
-            raise StopIteration(func(*args, **kwargs))
+            retval = func(*args, **kwargs)
+        except StopIteration as exc:
+            try:
+                raise RuntimeError('fake coroutine raised'
+                                   ' StopIteration') from exc
+            except RuntimeError as exc1:
+                self._status = _CoStatus.STOPPED
+                self._queue_yield_raise.put(_CoOpRaise(exc1))
+                return
         except BaseException as exc:  # pylint: disable=broad-exception-caught
+            self._status = _CoStatus.STOPPED
+            self._queue_yield_raise.put(_CoOpRaise(exc))
+            return
+        try:
+            raise StopIteration(retval)
+        except StopIteration as exc:
             self._status = _CoStatus.STOPPED
             self._queue_yield_raise.put(_CoOpRaise(exc))
 
@@ -100,14 +114,14 @@ class FakeCoroutine:
     def send(self, arg: Any) -> Any:
         '''send `arg` into fake coroutine, return next yielded value or raise
         StopIteration.'''
+        if self._status == _CoStatus.RUNNING:
+            raise ValueError('fake coroutine already executing')
+        if self._status == _CoStatus.STOPPED:
+            raise StopIteration()
+        if self._status == _CoStatus.CREATED and arg is not None:
+            raise TypeError("can't send non-None value to a just-started"
+                            " fake coroutine")
         with self._lock:
-            if self._status == _CoStatus.RUNNING:
-                raise ValueError('fake coroutine already executing')
-            if self._status == _CoStatus.STOPPED:
-                raise StopIteration()
-            if self._status == _CoStatus.CREATED and arg is not None:
-                raise TypeError("can't send non-None value to a just-started"
-                                " fake coroutine")
             self._status = _CoStatus.RUNNING
             self._queue_next_throw.put(_CoOpNext(arg))
             result = self._queue_yield_raise.get()
@@ -118,13 +132,16 @@ class FakeCoroutine:
             raise RuntimeError('unexpected result from fake coroutine')
 
     def close(self) -> None:
-        '''close() -> raise GeneratorExit inside fake coroutine.'''
-        self.throw(GeneratorExit())
-
-    def __del__(self) -> None:
+        '''raise GeneratorExit inside fake coroutine.'''
         if self._status in [_CoStatus.CREATED,
                             _CoStatus.YIELDED]:
-            self.close()
+            try:
+                self.throw(GeneratorExit())
+            except (StopIteration, GeneratorExit):
+                pass
+
+    def __del__(self) -> None:
+        self.close()
 
     def throw(self, exc: Union[BaseException, type],
               value: Optional[BaseException] = None,
@@ -135,27 +152,31 @@ class FakeCoroutine:
 
         Raise exception in fake coroutine, return next yielded value or raise
         StopIteration.'''
-        with self._lock:
-            if self._status == _CoStatus.RUNNING:
-                raise ValueError('fake coroutine already executing')
-            if self._status == _CoStatus.STOPPED:
-                raise StopIteration()
-            if not isinstance(tb, Optional[TracebackType]):  # type: ignore
+        if self._status == _CoStatus.RUNNING:
+            raise ValueError('fake coroutine already executing')
+        if self._status == _CoStatus.STOPPED:
+            raise StopIteration()
+        if not isinstance(tb, Optional[TracebackType]):  # type: ignore
+            raise TypeError(
+                'throw() third argument must be a traceback object')
+        if isinstance(exc, BaseException):
+            if value is not None:
                 raise TypeError(
-                    'throw() third argument must be a traceback object')
-            if isinstance(exc, BaseException):
-                if value is not None:
-                    raise TypeError(
-                        'instance exception may not have a separate value')
-                value = exc.with_traceback(tb)
-            elif isinstance(exc, type):
-                if value is None:
-                    value = exc()
-                value = value.with_traceback(tb)
+                    'instance exception may not have a separate value')
+            value = exc.with_traceback(tb)
+        elif isinstance(exc, type):
+            if not issubclass(exc, BaseException):
+                raise TypeError('exceptions must be classes or instances '
+                                'deriving from BaseException, not type')
+            if value is None:
+                value = exc()
             else:
-                raise TypeError(
-                    f'exceptions must be classes or instances deriving from'
-                    f'BaseException, not {type(value)}')
+                value = exc(value)
+        else:
+            raise TypeError(
+                f'exceptions must be classes or instances deriving from'
+                f'BaseException, not {type(value)}')
+        with self._lock:
             self._status = _CoStatus.RUNNING
             self._queue_next_throw.put(_CoOpThrow(value))
             result = self._queue_yield_raise.get()
@@ -171,7 +192,6 @@ def fake_coro(func: Callable) -> Callable[..., FakeCoroutine]:
 
     Fake coroutines are thread-safe but are not intended for multi-processing
     context.'''
-
     @functools.wraps(func)
     def inner(*args, **kwargs) -> FakeCoroutine:
         # checks whether arguments match the signature
@@ -197,18 +217,18 @@ def yield_(value: Any = None) -> Any:
     optionally receives the value sent by the caller.
 
     A `RuntimeError` will be raised when called outside a fake coroutine.'''
-
     context = _current_context()
     context._status = _CoStatus.YIELDED
     context._queue_yield_raise.put(_CoOpYield(value))
     result = context._queue_next_throw.get()
+    context._status = _CoStatus.RUNNING
     if isinstance(result, _CoOpNext):
         return result.value
     if isinstance(result, _CoOpThrow):
         raise result.value
-    else:
-        raise RuntimeError('unexpected result from fake coroutine')
+    raise RuntimeError('unexpected result from fake coroutine')
 
 
-def await_(coro: FakeCoroutine) -> Any:
+def yield_from(coro: FakeCoroutine) -> Any:
     context = _current_context()
+    # TODO: implement

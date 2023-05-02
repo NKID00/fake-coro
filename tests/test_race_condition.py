@@ -4,12 +4,25 @@ from fake_coro import fake_coro, yield_
 
 
 @fake_coro
-def func():
+def func1():
     self = yield_()
     next(self)
 
+@fake_coro
+def func2():
+    self = yield_()
+    self.close()
+
+@fake_coro
+def func3():
+    self = yield_()
+    self.throw(ZeroDivisionError)
+
 
 def test_race_condition():
-    coro = func()
+    coro = func1()
     next(coro)
-    coro.send(coro)
+    with pytest.raises(ValueError, match='fake coroutine already executing'):
+        coro.send(coro)
+    with pytest.raises(StopIteration):
+        next(coro)
