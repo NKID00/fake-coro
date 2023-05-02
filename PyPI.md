@@ -1,8 +1,4 @@
-# fake-coro
-
-![pypi](https://img.shields.io/pypi/v/fake-coro) ![python version](https://img.shields.io/pypi/pyversions/fake-coro) ![license](https://img.shields.io/pypi/l/fake-coro) ![workflow status](https://img.shields.io/github/actions/workflow/status/NKID00/fake-coro/test.yaml) ![codecov](https://codecov.io/gh/NKID00/fake-coro/branch/master/graph/badge.svg?token=JENJTW0BLG)
-
-> Coroutines emulated with threads.
+![workflow status](https://img.shields.io/github/actions/workflow/status/NKID00/fake-coro/test.yaml) ![codecov](https://codecov.io/gh/NKID00/fake-coro/branch/master/graph/badge.svg?token=JENJTW0BLG)
 
 This module provides fake coroutines that are not coroutines but act like coroutines.
 

@@ -3,7 +3,7 @@ name = "fake-coro"
 version = "0.1.0"
 description = "Coroutines emulated with threads."
 authors = ["NKID00 <this@nkid00.name>"]
-readme = "README.md"
+readme = "PyPI.md"
 license = "MIT"
 
 [tool.poetry.dependencies]
