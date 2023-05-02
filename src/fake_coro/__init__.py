@@ -156,7 +156,7 @@ class FakeCoroutine:
             raise ValueError('fake coroutine already executing')
         if self._status == _CoStatus.STOPPED:
             raise StopIteration()
-        if not isinstance(tb, Optional[TracebackType]):  # type: ignore
+        if tb is not None and not isinstance(tb, TracebackType):
             raise TypeError(
                 'throw() third argument must be a traceback object')
         if isinstance(exc, BaseException):
