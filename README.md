@@ -1,6 +1,6 @@
 # fake-coro
 
-![pypi](https://img.shields.io/pypi/v/fake-coro) ![python version](https://img.shields.io/pypi/pyversions/fake-coro) ![license](https://img.shields.io/pypi/l/fake-coro) ![workflow status](https://img.shields.io/github/actions/workflow/status/NKID00/fake-coro/test.yaml) ![codecov](https://codecov.io/gh/NKID00/fake-coro/branch/master/graph/badge.svg?token=JENJTW0BLG)
+[![pypi](https://img.shields.io/pypi/v/fake-coro) ![python version](https://img.shields.io/pypi/pyversions/fake-coro)](https://pypi.org/project/fake-coro/) [![license](https://img.shields.io/pypi/l/fake-coro)](https://github.com/NKID00/fake-coro/blob/master/LICENSE) [![workflow status](https://img.shields.io/github/actions/workflow/status/NKID00/fake-coro/test.yaml)](https://github.com/NKID00/fake-coro/actions) [![codecov](https://codecov.io/gh/NKID00/fake-coro/branch/master/graph/badge.svg?token=JENJTW0BLG)](https://app.codecov.io/gh/NKID00/fake-coro)
 
 > Coroutines emulated with threads.
 
