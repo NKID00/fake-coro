@@ -19,7 +19,7 @@ pytest-cov = "^4.0.0"
 
 [tool.pytest.ini_options]
 timeout = 3
-addopts = "--cov=fake_coro --cov-report term-missing --cov-report html --cov-report xml"
+addopts = "--doctest-modules --cov=fake_coro --cov-report term-missing --cov-report html --cov-report xml"
 
 [build-system]
 requires = ["poetry-core"]

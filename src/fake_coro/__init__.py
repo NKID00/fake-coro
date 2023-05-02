@@ -1,4 +1,73 @@
-'''Coroutines emulated with threads.'''
+'''Coroutines emulated with threads.
+
+This module provides fake coroutines that are not coroutines but act like
+coroutines.
+
+>>> from fake_coro import fake_coro, yield_
+>>> @fake_coro
+... def fib(limit):
+...     a, b = 1, 1
+...     while a < limit:
+...         yield_(a)
+...         a, b = b, a + b
+>>> list(fib(10))
+[1, 1, 2, 3, 5, 8]
+
+Other features of classic coroutines are also supported:
+
+>>> @fake_coro
+... def my_coro():
+...     return 42
+>>> next(my_coro())
+Traceback (most recent call last):
+  ...
+StopIteration: 42
+
+Also .send, .throw and .close:
+
+>>> @fake_coro
+... def average():
+...     total = count = 0
+...     num = yield_()
+...     while True:
+...         total += num
+...         count += 1
+...         num = yield_(total / count)
+>>> coro = average()
+>>> next(coro)
+>>> coro.send(1)
+1.0
+>>> coro.send(6)
+3.5
+>>> coro.close()
+>>> coro.send(7)
+Traceback (most recent call last):
+  ...
+StopIteration
+
+And sub-coroutines:
+
+>>> from fake_coro import yield_from
+>>> @fake_coro
+... def chain(*iterables):
+...     for iterable in iterables:
+...         yield_from(iterable)
+>>> list(chain(range(3), range(5)))
+[0, 1, 2, 0, 1, 2, 3, 4]
+
+Fake coroutines are implemented by threads and obviously perform much worse
+than native classic coroutines.  However, normal functions invoked by fake
+coroutines can also yield like coroutines:
+
+>>> @fake_coro
+... def foo():
+...     bar()
+...     yield_(2)
+>>> def bar():
+...     yield_(1)  # bar is not a coroutine but can yield!
+>>> list(foo())
+[1, 2]
+'''
 
 from __future__ import annotations
 from typing import Callable, Any, Iterable, Mapping, Union, Optional, Generator
@@ -17,8 +86,8 @@ __all__ = ['FakeCoroutine', 'fake_coro', 'yield_', 'yield_from']
 class _CoStatus(enum.Enum):
     CREATED = enum.auto()
     RUNNING = enum.auto()
-    YIELDED = enum.auto()
-    STOPPED = enum.auto()
+    SUSPENDED = enum.auto()
+    CLOSED = enum.auto()
 
 
 @dataclass
@@ -78,7 +147,7 @@ class FakeCoroutine:
                 raise result.value
                 # pylint: disable=broad-exception-caught
             except BaseException as exc:
-                self._status = _CoStatus.STOPPED
+                self._status = _CoStatus.CLOSED
                 self._queue_yield_raise.put(_CoOpRaise(exc))
                 return
         else:  # pragma: no cover
@@ -92,17 +161,17 @@ class FakeCoroutine:
                 raise RuntimeError('fake coroutine raised'
                                    ' StopIteration') from exc
             except RuntimeError as exc1:
-                self._status = _CoStatus.STOPPED
+                self._status = _CoStatus.CLOSED
                 self._queue_yield_raise.put(_CoOpRaise(exc1))
                 return
         except BaseException as exc:  # pylint: disable=broad-exception-caught
-            self._status = _CoStatus.STOPPED
+            self._status = _CoStatus.CLOSED
             self._queue_yield_raise.put(_CoOpRaise(exc))
             return
         try:
             raise StopIteration(return_value)
         except StopIteration as exc:
-            self._status = _CoStatus.STOPPED
+            self._status = _CoStatus.CLOSED
             self._queue_yield_raise.put(_CoOpRaise(exc))
 
     def __iter__(self) -> FakeCoroutine:
@@ -116,7 +185,7 @@ class FakeCoroutine:
         StopIteration.'''
         if self._status == _CoStatus.RUNNING:
             raise ValueError('fake coroutine already executing')
-        if self._status == _CoStatus.STOPPED:
+        if self._status == _CoStatus.CLOSED:
             raise StopIteration()
         if self._status == _CoStatus.CREATED and arg is not None:
             raise TypeError("can't send non-None value to a just-started"
@@ -135,7 +204,7 @@ class FakeCoroutine:
     def close(self) -> None:
         '''raise GeneratorExit inside fake coroutine.'''
         if self._status in [_CoStatus.CREATED,
-                            _CoStatus.YIELDED]:
+                            _CoStatus.SUSPENDED]:
             try:
                 self.throw(GeneratorExit())
             except (StopIteration, GeneratorExit):
@@ -155,7 +224,7 @@ class FakeCoroutine:
         StopIteration.'''
         if self._status == _CoStatus.RUNNING:
             raise ValueError('fake coroutine already executing')
-        if self._status == _CoStatus.STOPPED:
+        if self._status == _CoStatus.CLOSED:
             raise StopIteration()
         if tb is not None and not isinstance(tb, TracebackType):
             raise TypeError(
@@ -226,7 +295,7 @@ def yield_(*value: Any) -> Any:
     else:
         value_or_none = value
     context = _current_context()
-    context._status = _CoStatus.YIELDED
+    context._status = _CoStatus.SUSPENDED
     context._queue_yield_raise.put(_CoOpYield(value_or_none))
     result = context._queue_next_throw.get()
     context._status = _CoStatus.RUNNING
@@ -250,7 +319,7 @@ def yield_from(coro: Union[Iterable, Generator, FakeCoroutine]) -> Any:
     except StopIteration as exc:
         return exc.value
     while True:
-        context._status = _CoStatus.YIELDED
+        context._status = _CoStatus.SUSPENDED
         context._queue_yield_raise.put(_CoOpYield(yield_value))
         result = context._queue_next_throw.get()
         context._status = _CoStatus.RUNNING

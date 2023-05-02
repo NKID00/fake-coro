@@ -5,7 +5,7 @@ from fake_coro import fake_coro, yield_
 
 @fake_coro
 def average():
-    total, count = 0, 0
+    total = count = 0
     num = yield_()
     while True:
         total += num
