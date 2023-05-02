@@ -26,3 +26,13 @@ def test_race_condition():
         coro.send(coro)
     with pytest.raises(StopIteration):
         next(coro)
+
+    coro = func2()
+    next(coro)
+    with pytest.raises(ValueError, match='fake coroutine already executing'):
+        coro.send(coro)
+
+    coro = func3()
+    next(coro)
+    with pytest.raises(ValueError, match='fake coroutine already executing'):
+        coro.send(coro)

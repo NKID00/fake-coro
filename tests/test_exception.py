@@ -41,8 +41,32 @@ def func5():
 
 
 def test_exception():
+    with pytest.raises(RuntimeError, match='not in fake coroutine'):
+        yield_()
+
     with pytest.raises(TypeError, match='too many positional arguments'):
         coro = func1(1)
+
+    coro = func1()
+    with pytest.raises(TypeError, match=(
+            "can't send non-None value to a just-started fake coroutine")):
+        coro.send(1)
+
+    coro = func1()
+    with pytest.raises(TypeError, match=(
+            r'throw\(\) third argument must be a traceback object')):
+        coro.throw(ZeroDivisionError, ZeroDivisionError(), 1)
+
+    coro = func1()
+    with pytest.raises(TypeError, match=(
+            'instance exception may not have a separate value')):
+        coro.throw(ZeroDivisionError(), ZeroDivisionError())
+
+    coro = func1()
+    with pytest.raises(TypeError, match=(
+            'exceptions must be classes or instances deriving from'
+            ' BaseException, not int')):
+        coro.throw(1)
 
     coro = func1()
     with pytest.raises(ZeroDivisionError,

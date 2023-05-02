@@ -203,6 +203,8 @@ class FakeCoroutine:
 
     def close(self) -> None:
         '''raise GeneratorExit inside fake coroutine.'''
+        if self._status == _CoStatus.RUNNING:
+            raise ValueError('fake coroutine already executing')
         if self._status in [_CoStatus.CREATED,
                             _CoStatus.SUSPENDED]:
             try:
@@ -236,8 +238,8 @@ class FakeCoroutine:
             value = exc.with_traceback(tb)
         elif isinstance(exc, type):
             if not issubclass(exc, BaseException):
-                raise TypeError('exceptions must be classes or instances '
-                                'deriving from BaseException, not type')
+                raise TypeError('exceptions must be classes or instances'
+                                ' deriving from BaseException, not type')
             if value is None:
                 value = exc()
             else:
@@ -245,7 +247,7 @@ class FakeCoroutine:
         else:
             raise TypeError(
                 f'exceptions must be classes or instances deriving from'
-                f'BaseException, not {type(value)}')
+                f' BaseException, not {type(exc).__name__}')
         with self._lock:
             self._status = _CoStatus.RUNNING
             self._queue_next_throw.put(_CoOpThrow(value))

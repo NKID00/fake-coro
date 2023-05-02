@@ -23,6 +23,19 @@ def func1():
     yield_from(range(10))
 
 
+@fake_coro
+def func2(coro):
+    result = yield_from(coro)
+    return result
+
+@fake_coro
+def func3():
+    try:
+        yield_()
+    except ZeroDivisionError:
+        return 42
+
+
 def test_yield_from(capfd):
     iterable = [0, 1, [[2, 3, 4], [[5, 6], 7], 8], [[[9]]]]
     print('\n'.join(map(to_str, tree(iterable))))
@@ -55,3 +68,20 @@ def test_yield_from(capfd):
         coro.throw(StopIteration)
     with pytest.raises(StopIteration):
         next(coro)
+
+    coro = func2(range(0))
+    with pytest.raises(StopIteration):
+        next(coro)
+
+    coro = func2(range(1))
+    next(coro)
+    with pytest.raises(AttributeError, match=(
+            "range_iterator' object has no attribute 'send'")):
+        coro.send(1)
+    with pytest.raises(StopIteration):
+        coro.send(1)
+    
+    coro = func2(func3())
+    next(coro)
+    with pytest.raises(StopIteration, match='42'):
+        coro.throw(ZeroDivisionError)

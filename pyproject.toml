@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "fake-coro"
-version = "0.1.0"
+version = "0.1.1"
 description = "Coroutines emulated with threads."
 authors = ["NKID00 <this@nkid00.name>"]
 readme = "PyPI.md"
 license = "MIT"
+repository = "https://github.com/NKID00/fake-coro"
 
 [tool.poetry.dependencies]
 python = "^3.7"
