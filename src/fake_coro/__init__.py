@@ -81,7 +81,7 @@ class FakeCoroutine:
                 self._status = _CoStatus.STOPPED
                 self._queue_yield_raise.put(_CoOpRaise(exc))
                 return
-        else:
+        else:  # pragma: no cover
             self._queue_yield_raise.put(_CoOpRaise(
                 RuntimeError('unexpected result from fake coroutine')))
             return
@@ -129,7 +129,8 @@ class FakeCoroutine:
                 return result.value
             if isinstance(result, _CoOpRaise):
                 raise result.value
-            raise RuntimeError('unexpected result from fake coroutine')
+            raise RuntimeError(  # pragma: no cover
+                'unexpected result from fake coroutine')
 
     def close(self) -> None:
         '''raise GeneratorExit inside fake coroutine.'''
@@ -184,7 +185,8 @@ class FakeCoroutine:
                 return result.value
             if isinstance(result, _CoOpRaise):
                 raise result.value
-            raise RuntimeError('unexpected result from fake coroutine')
+            raise RuntimeError(  # pragma: no cover
+                'unexpected result from fake coroutine')
 
 
 def fake_coro(func: Callable) -> Callable[..., FakeCoroutine]:
@@ -226,7 +228,8 @@ def yield_(value: Any = None) -> Any:
         return result.value
     if isinstance(result, _CoOpThrow):
         raise result.value
-    raise RuntimeError('unexpected result from fake coroutine')
+    raise RuntimeError(  # pragma: no cover
+        'unexpected result from fake coroutine')
 
 
 def yield_from(coro: FakeCoroutine) -> Any:
